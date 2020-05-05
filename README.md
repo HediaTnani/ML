@@ -1,1 +1,1 @@
-# Teaching materials for ML in bioinformatics
+# ML for bioinformatics
