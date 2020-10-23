@@ -1,0 +1,149 @@
+---
+title: "mlr3"
+author: "Hédia Tnani"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    toc: yes
+    toc_float: yes
+    pandoc_args:
+    - --number-sections
+    - --number-offset=0
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Using mlr3 package for ML {-}
+
+
+# Loading the data
+
+```{r, warning=FALSE, message=FALSE}
+library("mlr3data")
+library("dplyr")
+library("mlbench")
+library("mlr3")
+library("mlr3learners")
+library("mlr3viz")
+data("BreastCancer")
+bc <- BreastCancer
+head(bc)
+```
+# Exploratory Data Analysis
+
+```{r}
+skimr::skim(bc)
+```
+
+```{r}
+DataExplorer::plot_bar(bc)
+```
+
+```{r}
+target_label <- "Class"
+head(bc)
+```
+```{r}
+bc <- BreastCancer[, -c(1,7)]
+table(BreastCancer$Class) / nrow(BreastCancer)
+```
+
+# Transform all factors to numeric 
+
+```{r}
+mut <- bc[, -9] %>% 
+  mutate_all(as.character) %>%
+  mutate_all(as.numeric)
+bc_data <- cbind(mut, bc[, target_label])
+colnames(bc_data) <- c(colnames(mut), target_label)
+head(bc_data)
+```
+# Case1
+
+## Constructing Learners and Tasks
+### Create learning task
+```{r}
+task_bc <- TaskClassif$new(id = "bc_data", backend = bc_data, target = target_label)
+task_bc
+```
+
+### Load learner and set hyperparameter
+```{r}
+learner <- lrn("classif.rpart", cp = .01)
+```
+
+## Basic train + predict
+### Train/test split
+
+```{r}
+train_set <- sample(task_bc$nrow, 0.8 * task_bc$nrow)
+test_set <- setdiff(seq_len(task_bc$nrow), train_set)
+```
+
+### Train the model
+
+```{r}
+learner$train(task_bc, row_ids = train_set)
+```
+
+### Predict data
+
+```{r}
+prediction <- learner$predict(task_bc, row_ids = test_set)
+```
+
+### Calculate performance
+
+```{r}
+prediction$confusion
+```
+
+```{r}
+measure <- msr("classif.acc")
+prediction$score(measure)
+```
+
+# Case 2
+
+## Data split
+
+```{r}
+set.seed(1337)
+train_size <- 3 / 4
+train_indices <- sample(
+  x = seq(1, nrow(bc_data), by = 1),
+  size = ceiling(train_size * nrow(bc_data)), replace = FALSE
+)
+bc_train <- bc_data[ train_indices, ]
+bc_test <- bc_data[ -train_indices, ]
+task <- TaskClassif$new(
+  id = "bc_task", backend = bc_train,
+  target = target_label
+)
+```
+
+## Models
+### Logistic regression
+
+```{r}
+learner_logreg <- lrn("classif.log_reg", predict_type = "prob")
+learner_logreg$train(task)
+pred_logreg <- learner_logreg$predict_newdata(newdata = bc_test)
+pred_logreg$score(list(msr("classif.ce"), msr("classif.auc")))
+pred_logreg$confusion
+```
+
+### KNN
+
+```{r}
+learner_knn <- lrn("classif.kknn", k = 5, predict_type = "prob")
+learner_knn$train(task)
+pred_knn <- learner_knn$predict_newdata(newdata = bc_test)
+pred_knn$score(list(msr("classif.ce"), msr("classif.auc")))
+pred_knn$confusion
+```
+
